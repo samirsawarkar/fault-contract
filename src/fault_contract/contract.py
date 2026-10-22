@@ -11,6 +11,7 @@ from __future__ import annotations
 import importlib
 import json
 import sys
+from fractions import Fraction
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator
@@ -283,8 +284,27 @@ def walk(node: Any) -> Iterator[dict[str, Any]]:
             stack.extend(n)
 
 
+def schema_nodes(node: Any) -> Iterator[dict[str, Any]]:
+    """Every schema object in a schema, depth first. Literal data (enum, const, default, examples) is
+    not walked, and in property maps only the values are schemas."""
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        if isinstance(n, list):
+            stack.extend(n)
+            continue
+        if not isinstance(n, dict):
+            continue
+        yield n
+        for k, v in n.items():
+            if k in SCHEMA_MAPS and isinstance(v, dict):
+                stack.extend(v.values())
+            elif k not in NOT_SCHEMA:
+                stack.append(v)
+
+
 def _formats(schema: Any) -> Iterator[str]:
-    for n in walk(schema):
+    for n in schema_nodes(schema):
         if isinstance(n.get("format"), str):
             yield n["format"]
 
@@ -395,7 +415,21 @@ def _resolve_with(node: Any, resolver: Any, depth: int, entered: bool = False) -
         rest = _resolve_with({k: v for k, v in node.items() if k != "$ref"}, resolver, depth, entered=True)
         target = _resolve_with(got.contents, got.resolver, depth + 1, entered=True)
         return merge_ref(target, rest)
-    return {k: _resolve_with(v, resolver, depth) for k, v in node.items()}
+    return _children(node, lambda v: _resolve_with(v, resolver, depth))
+
+
+def _children(node: dict[str, Any], fn: Any) -> dict[str, Any]:
+    """Apply ``fn`` to every subschema of a schema object. Literal data (enum, const, default,
+    examples) is copied as it is; in property maps the names are data and every value a schema."""
+    out: dict[str, Any] = {}
+    for k, v in node.items():
+        if k in SCHEMA_MAPS and isinstance(v, dict):
+            out[k] = {name: fn(sub) for name, sub in v.items()}
+        elif k in NOT_SCHEMA:
+            out[k] = v
+        else:
+            out[k] = fn(v)
+    return out
 
 
 def json_key(v: Any) -> Any:
@@ -403,7 +437,10 @@ def json_key(v: Any) -> Any:
     if isinstance(v, bool) or v is None:
         return ("const", v)
     if isinstance(v, (int, float)):
-        return ("number", float(v))
+        try:
+            return ("number", Fraction(v))  # exact: big integers keep every digit, 1 equals 1.0
+        except (OverflowError, ValueError):  # inf, nan
+            return ("number", repr(v))
     if isinstance(v, str):
         return ("string", v)
     if isinstance(v, list):
@@ -471,4 +508,4 @@ def _resolve_pointer_refs(node: Any, root: Any, depth: int) -> Any:
         rest = _resolve_pointer_refs({k: v for k, v in node.items() if k != "$ref"}, root, depth)
         target = _resolve_pointer_refs(target, root, depth + 1)
         return merge_ref(target, rest)
-    return {k: _resolve_pointer_refs(v, root, depth) for k, v in node.items()}
+    return _children(node, lambda v: _resolve_pointer_refs(v, root, depth))

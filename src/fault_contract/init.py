@@ -19,7 +19,7 @@ from faultgate_zero.redact import builtin as redact
 from faultgate_zero.results import error_of
 
 from .check import expand, load_traces
-from .contract import NOT_SCHEMA, SCHEMA_MAPS, SUFFIX, ContractError, import_object
+from .contract import NOT_SCHEMA, SCHEMA_MAPS, SUFFIX, ContractError, import_object, schema_nodes
 
 MAX_DEPTH = 4
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
@@ -99,23 +99,13 @@ def from_defs(definitions: dict[str, dict[str, Any]], folder: Path, *, allow_ext
         if not schema:
             schema = {"type": "object"} if allow_extra else {"type": "object", "additionalProperties": False}
         any_required = any_required or any(isinstance(n.get("required"), list) and n["required"]
-                                           for n in _objects(schema))
+                                           for n in schema_nodes(schema))
         _write(folder, tool, "request", {"schema": schema}, force, out)
     if definitions and not any_required:
         out.say("note  no tool definition marks any field as required. Decide which fields are required and add them.")
     out.say('next  add a "response" section for each tool whose result the agent reads:')
     out.say("      fault-contract init --from-traces EXPORT --side response --all-tools")
     return out
-
-
-def _objects(n: Any):
-    if isinstance(n, dict):
-        yield n
-        for v in n.values():
-            yield from _objects(v)
-    elif isinstance(n, list):
-        for v in n:
-            yield from _objects(v)
 
 
 # ---------------------------------------------------------------- from pydantic

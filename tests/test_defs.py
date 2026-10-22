@@ -69,6 +69,33 @@ def test_d6_compares_values_as_json_schema_does(tmp_path, d_enum, c_enum, fires)
     assert ("D6" in rules(found)) is fires
 
 
+def test_big_integers_keep_their_precision(tmp_path):
+    from fault_contract.contract import json_equal, merge_ref
+    assert not json_equal(9007199254740992, 9007199254740993) and json_equal(10**400, 10**400)
+    assert json_equal(2, 2.0) and not json_equal(float("nan"), 1)
+    assert rules(run(tmp_path, obj({"v": {"enum": [9007199254740993]}}),
+                     schema(obj({"v": {"enum": [9007199254740992]}})))) == ["D6"]
+    assert merge_ref({"const": 9007199254740992}, {"const": 9007199254740993}) == {
+        "allOf": [{"const": 9007199254740992}, {"const": 9007199254740993}]}
+
+
+@pytest.mark.parametrize("with_side", [True, False])
+def test_literal_data_is_never_expanded_as_schema(tmp_path, with_side):
+    from fault_contract.contract import resolve_refs
+    s = {"$defs": {"x": {"type": "string"}}, "type": "object", "properties": {
+        "v": {"enum": [{"$ref": "#/$defs/x"}]}, "enum": {"$ref": "#/$defs/x"}}}
+    if with_side:
+        cs, _ = contracts_with(tmp_path, t={"request": schema(s)})
+        side = cs.get("t").request
+        out = resolve_refs(side.json_schema(), side)
+    else:
+        out = resolve_refs(s)
+    assert out["properties"]["v"]["enum"] == [{"$ref": "#/$defs/x"}]       # data stays data
+    assert out["properties"]["enum"]["type"] == "string"                   # a property named enum is a schema
+    found = run(tmp_path / "d", obj({"v": {"enum": [{"type": "string"}]}}), schema(s))
+    assert "D6" in rules(found)
+
+
 def test_nested_enums_compare_as_json_too(tmp_path):
     d = obj({"m": obj({"flag": {"enum": [1]}})})
     c = obj({"m": obj({"flag": {"enum": [True]}})})

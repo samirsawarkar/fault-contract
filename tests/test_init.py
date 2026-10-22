@@ -54,6 +54,21 @@ def test_properties_named_like_keywords_are_closed_too():
     assert s["properties"]["default"]["default"] == {"x": {"properties": {}}}   # data is left alone
 
 
+def test_a_required_key_inside_literal_data_is_not_a_required_field(tmp_path):
+    from fault_contract import defs
+    tools = [{"name": "t", "input_schema": {"type": "object", "properties": {
+        "mode": {"type": "object", "default": {"required": ["x"]}}}}}]
+    w = init.from_defs(defs.parse(tools), tmp_path)
+    assert any(line.startswith("note  no tool definition marks any field as required") for line in w.lines)
+
+
+def test_formats_inside_literal_data_are_not_listed(tmp_path):
+    from fault_contract.contract import _formats
+    s = {"type": "object", "properties": {"format": {"type": "string", "format": "date"},
+                                          "x": {"enum": [{"format": "made-up"}]}}}
+    assert sorted(_formats(s)) == ["date"]
+
+
 def test_allow_extra_skips_additional_properties(tmp_path):
     init.from_defs(init_defs(), tmp_path, allow_extra=True)
     assert "additionalProperties" not in read(tmp_path, "issue_refund")["request"]["schema"]
