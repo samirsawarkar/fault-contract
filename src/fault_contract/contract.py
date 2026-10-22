@@ -392,10 +392,36 @@ def _resolve_with(node: Any, resolver: Any, depth: int, entered: bool = False) -
             got = resolver.lookup(node["$ref"])
         except (Unresolvable, NoSuchResource, ValueError, KeyError, TypeError):
             return dict(node)
-        rest = {k: v for k, v in node.items() if k != "$ref"}
+        rest = _resolve_with({k: v for k, v in node.items() if k != "$ref"}, resolver, depth, entered=True)
         target = _resolve_with(got.contents, got.resolver, depth + 1, entered=True)
-        return {**target, **rest} if isinstance(target, dict) else target
+        return merge_ref(target, rest)
     return {k: _resolve_with(v, resolver, depth) for k, v in node.items()}
+
+
+def merge_ref(target: Any, rest: dict[str, Any]) -> Any:
+    """A ``$ref`` target and its sibling keywords as one schema. Both apply, so nothing is dropped:
+    property maps are joined, ``required`` lists united, and anything that truly conflicts is kept
+    side by side as ``allOf`` (which ``defs`` reports as not compared)."""
+    if not rest:
+        return target
+    if not isinstance(target, dict):
+        return {"allOf": [target, rest]}
+    out = dict(target)
+    for k, v in rest.items():
+        if k not in out or out[k] == v:
+            out[k] = v
+        elif k in ("properties", "patternProperties", "$defs") and isinstance(v, dict) and isinstance(out[k], dict):
+            joined = dict(out[k])
+            for name, sub in v.items():
+                joined[name] = sub if name not in joined or joined[name] == sub else {"allOf": [joined[name], sub]}
+            out[k] = joined
+        elif k == "required" and isinstance(v, list) and isinstance(out[k], list):
+            out[k] = list(dict.fromkeys([*out[k], *v]))
+        elif k in ("$id", "$comment", "title", "description"):
+            continue
+        else:
+            return {"allOf": [target, rest]}
+    return out
 
 
 def _resolve_pointer_refs(node: Any, root: Any, depth: int) -> Any:
@@ -409,7 +435,7 @@ def _resolve_pointer_refs(node: Any, root: Any, depth: int) -> Any:
             target = _pointer(root, ref[1:])
         except (LookupError, ValueError):
             return dict(node)
-        rest = {k: v for k, v in node.items() if k != "$ref"}
+        rest = _resolve_pointer_refs({k: v for k, v in node.items() if k != "$ref"}, root, depth)
         target = _resolve_pointer_refs(target, root, depth + 1)
-        return {**target, **rest} if isinstance(target, dict) else target
+        return merge_ref(target, rest)
     return {k: _resolve_pointer_refs(v, root, depth) for k, v in node.items()}

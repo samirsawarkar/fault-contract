@@ -95,6 +95,30 @@ def test_refs_in_the_contract_are_followed(tmp_path):
     assert rules(run(tmp_path, obj({"a": {"type": "string"}}), schema(c))) == ["D5"]
 
 
+def test_a_ref_with_sibling_properties_keeps_both(tmp_path):
+    # both the referenced properties and the sibling ones apply when validating; defs must see both
+    c = {"$defs": {"money": {"type": "object", "properties": {"amount": {"type": "number"}}, "required": ["amount"]}},
+         "$ref": "#/$defs/money", "properties": {"note": {"type": "string"}}, "required": ["note"]}
+    d = obj({"amount": {"type": "string"}, "note": {"type": "string"}}, ["note"])
+    found = run(tmp_path, d, schema(c))
+    assert ("D5", "$.amount") in {(f.rule, f.message.split(" ")[0]) for f in found}
+    assert ("D7", "$.amount") in {(f.rule, f.message.split(" ")[0]) for f in found}
+
+
+def test_a_ref_whose_siblings_conflict_is_listed_as_not_compared(tmp_path):
+    c = {"$defs": {"s": {"type": "string"}}, "type": "object", "properties": {"a": {"$ref": "#/$defs/s", "type": "integer"}}}
+    found = run(tmp_path, obj({"a": {"type": "boolean"}}), schema(c))
+    assert any(f.level == "info" and "$.a allOf" in f.message for f in found)
+
+
+def test_pydantic_refs_with_siblings_keep_both(monkeypatch, tmp_path):
+    from fault_contract.contract import resolve_refs
+    s = {"$defs": {"M": {"type": "object", "properties": {"x": {"type": "number"}}}},
+         "$ref": "#/$defs/M", "properties": {"y": {"type": "string"}}}
+    out = resolve_refs(s)
+    assert set(out["properties"]) == {"x", "y"}
+
+
 def test_not_compared_list_appears(tmp_path):
     c = obj({"a": {"type": "string", "pattern": "^x$"}, "b": {"anyOf": [{"type": "string"}, {"type": "null"}]},
              "d": {"type": "string", "format": "date"}, "n": {"type": "number", "minimum": 0}})
