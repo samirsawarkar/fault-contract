@@ -17,6 +17,7 @@ dependencies = ["faultgate-zero[formats]>=0.2,<0.3", "jsonschema>=4.18", "refere
 
 [project.optional-dependencies]
 # pydantic is imported only when a contract names a model; the tests need it, and openai for the example agent
+# (scout OK rows: pydantic, pytest-xdist in .aes/scout/scout-ce46b2db.md; openai/openai-python in scout-a7ad5ccb.md)
 dev = ["pydantic>=2", "pytest-xdist>=3", "openai>=2"]
 
 [project.scripts]
