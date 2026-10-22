@@ -184,6 +184,27 @@ def test_a_ref_target_with_its_own_id_and_inner_refs(tmp_path):
     assert (v.path, v.keyword) == ("$.thing", "type")
 
 
+def test_a_root_with_its_own_id_resolves_its_embedded_resources(tmp_path):
+    s = {"$id": "nested/root.json", "type": "object", "properties": {"thing": {"$ref": "thing.json"}},
+         "$defs": {"t": {"$id": "thing.json", "type": "string"}}}
+    write_contract(folder(tmp_path), "t", request=schema(s))
+    side = load_dir(folder(tmp_path)).get("t").request
+    [v] = validate_side(side, '{"thing": 5}', "t", 1)
+    assert (v.path, v.keyword) == ("$.thing", "type")
+
+
+def test_resolve_refs_follows_nested_id_scopes(tmp_path):
+    from fault_contract.contract import resolve_refs
+    # amount is an embedded resource whose own #/$defs/n is a number; the outer #/$defs/n is a string
+    s = {"type": "object", "$defs": {"n": {"type": "string"}},
+         "properties": {"amount": {"$id": "inner.json", "$defs": {"n": {"type": "number"}}, "$ref": "#/$defs/n"}}}
+    write_contract(folder(tmp_path), "t", request=schema(s))
+    side = load_dir(folder(tmp_path)).get("t").request
+    assert resolve_refs(side.json_schema(), side)["properties"]["amount"]["type"] == "number"
+    [v] = validate_side(side, '{"amount": "x"}', "t", 1)      # the validator agrees
+    assert v.message == "expected number, got string"
+
+
 @pytest.mark.parametrize("name", ["enum", "const", "default", "examples"])
 def test_properties_named_like_data_keywords_are_still_checked(tmp_path, name):
     write_contract(folder(tmp_path), "t", request=schema({"type": "object", "properties": {name: {"$ref": "#/missing"}}}))

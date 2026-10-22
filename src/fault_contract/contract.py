@@ -229,8 +229,11 @@ def _schema_side(path: Path, name: str, schema: dict[str, Any] | bool, source: s
         at = "#/" + "/".join(str(p) for p in exc.path) if exc.path else "#"
         raise ContractError(f"{path}: {key}: invalid schema at {at}: {exc.message}") from None
     base = path.resolve().as_uri()
-    if isinstance(schema, dict) and "$id" not in schema:
-        schema = {"$id": base, **schema}
+    if isinstance(schema, dict):
+        # the root is identified by the contract file; a relative $id of its own is anchored there
+        own = schema.get("$id")
+        schema = {**schema, "$id": urljoin(base, own) if isinstance(own, str) else base}
+        base = schema["$id"]
     resources = _check_refs(schema, base, path, key)
     registry = Registry().with_resources(resources.items())
     validator = Draft202012Validator(schema, registry=registry, format_checker=FORMAT_CHECKER)
@@ -349,8 +352,13 @@ def _check_refs(schema: Any, base: str, path: Path, key: str) -> dict[str, Resou
             elif k not in NOT_SCHEMA:
                 visit(v, resolver)
 
-    visit(schema, registry.resolver(base_uri=base), entered=True)
+    # the registry already holds the root at ``base``; a root with an $id of its own is scoped by it
+    visit(schema, registry.resolver(base_uri=base), entered=_scoped_at(schema, base))
     return resources
+
+
+def _scoped_at(schema: Any, base: str) -> bool:
+    return not isinstance(schema, dict) or not isinstance(schema.get("$id"), str) or schema["$id"] == base
 
 
 def _file_path(uri: str) -> str:
@@ -367,21 +375,25 @@ def resolve_refs(schema: Any, side: Side | None = None, depth: int = 0) -> Any:
         return _resolve_pointer_refs(schema, schema, depth)
     root = Resource.from_contents(side.schema or {}, default_specification=DRAFT202012)
     resolver = side.registry.with_resource(side.base_uri, root).resolver(base_uri=side.base_uri)
-    return _resolve_with(schema, resolver, depth)
+    entered = schema is not side.schema or _scoped_at(schema, side.base_uri)
+    return _resolve_with(schema, resolver, depth, entered)
 
 
-def _resolve_with(node: Any, resolver: Any, depth: int) -> Any:
+def _resolve_with(node: Any, resolver: Any, depth: int, entered: bool = False) -> Any:
+    """``entered``: the resolver is already scoped to this node (a $ref target, or the root)."""
     if isinstance(node, list):
         return [_resolve_with(x, resolver, depth) for x in node]
     if not isinstance(node, dict):
         return node
+    if isinstance(node.get("$id"), str) and not entered:
+        resolver = resolver.in_subresource(Resource.from_contents(node, default_specification=DRAFT202012))
     if isinstance(node.get("$ref"), str) and depth < 32:
         try:
             got = resolver.lookup(node["$ref"])
-        except (Unresolvable, NoSuchResource):
+        except (Unresolvable, NoSuchResource, ValueError, KeyError, TypeError):
             return dict(node)
         rest = {k: v for k, v in node.items() if k != "$ref"}
-        target = _resolve_with(got.contents, got.resolver, depth + 1)
+        target = _resolve_with(got.contents, got.resolver, depth + 1, entered=True)
         return {**target, **rest} if isinstance(target, dict) else target
     return {k: _resolve_with(v, resolver, depth) for k, v in node.items()}
 

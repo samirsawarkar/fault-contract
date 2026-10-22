@@ -44,6 +44,16 @@ def init_defs():
     return defs.parse(TOOLS)
 
 
+def test_properties_named_like_keywords_are_closed_too():
+    s = init.close_objects({"type": "object", "properties": {
+        "enum": {"type": "object", "properties": {"a": {"type": "string"}}},
+        "properties": {"type": "object"}, "default": {"type": "string", "default": {"x": {"properties": {}}}}}})
+    assert s["properties"]["enum"]["additionalProperties"] is False
+    assert s["properties"]["properties"]["additionalProperties"] is False
+    assert "additionalProperties" not in s["properties"]          # the map of names itself is not a schema
+    assert s["properties"]["default"]["default"] == {"x": {"properties": {}}}   # data is left alone
+
+
 def test_allow_extra_skips_additional_properties(tmp_path):
     init.from_defs(init_defs(), tmp_path, allow_extra=True)
     assert "additionalProperties" not in read(tmp_path, "issue_refund")["request"]["schema"]

@@ -19,7 +19,7 @@ from faultgate_zero.redact import builtin as redact
 from faultgate_zero.results import error_of
 
 from .check import expand, load_traces
-from .contract import SUFFIX, ContractError, import_object
+from .contract import NOT_SCHEMA, SCHEMA_MAPS, SUFFIX, ContractError, import_object
 
 MAX_DEPTH = 4
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
@@ -79,10 +79,12 @@ def close_objects(schema: Any) -> Any:
         if is_object and "additionalProperties" not in n and "patternProperties" not in n \
                 and "unevaluatedProperties" not in n:
             n["additionalProperties"] = False
-        for k, v in n.items():
-            if k in ("enum", "const", "examples", "default"):
-                continue
-            visit(v)
+        for k, v in list(n.items()):
+            if k in SCHEMA_MAPS and isinstance(v, dict):
+                for sub in v.values():  # property names are data, even "enum" or "type"
+                    visit(sub)
+            elif k not in NOT_SCHEMA:
+                visit(v)
 
     visit(s)
     return s
