@@ -335,7 +335,8 @@ def resolve_refs(schema: Any, side: Side | None = None, depth: int = 0) -> Any:
     display). Cycles and refs that cannot be resolved are kept as ``$ref``."""
     if side is None or side.kind != "schema":
         return _resolve_pointer_refs(schema, schema, depth)
-    resolver = side.registry.resolver(base_uri=side.base_uri)
+    root = Resource.from_contents(side.schema or {}, default_specification=DRAFT202012)
+    resolver = side.registry.with_resource(side.base_uri, root).resolver(base_uri=side.base_uri)
     return _resolve_with(schema, resolver, depth)
 
 
