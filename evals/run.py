@@ -58,6 +58,8 @@ def _pytest(*args: str, cwd: Path = ROOT) -> tuple[bool, str]:
     r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *args], cwd=cwd,
                        capture_output=True, text=True)
     last = (r.stdout.strip().splitlines() or ["?"])[-1]
+    if r.returncode != 0:  # show why, so a failing row can be fixed from the log alone
+        print(f"--- pytest {' '.join(args)} in {cwd} failed:\n{r.stdout[-3000:]}{r.stderr[-1500:]}", file=sys.stderr)
     return r.returncode == 0, last
 
 
