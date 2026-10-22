@@ -287,6 +287,7 @@ def _formats(schema: Any) -> Iterator[str]:
 
 
 NOT_SCHEMA = ("enum", "const", "examples", "default")  # keywords whose values are data, not subschemas
+SCHEMA_MAPS = ("properties", "patternProperties", "$defs", "definitions", "dependentSchemas")  # name -> schema
 
 
 def _check_refs(schema: Any, base: str, path: Path, key: str) -> dict[str, Resource]:
@@ -311,14 +312,15 @@ def _check_refs(schema: Any, base: str, path: Path, key: str) -> dict[str, Resou
     registry = Registry(retrieve=retrieve).with_resource(base, root)
     seen = {id(schema)}
 
-    def visit(node: Any, resolver: Any) -> None:
+    def visit(node: Any, resolver: Any, entered: bool = False) -> None:
+        """``entered``: the resolver is already scoped to this node (a $ref target, or the root)."""
         if isinstance(node, list):
             for x in node:
                 visit(x, resolver)
             return
         if not isinstance(node, dict):
             return
-        if isinstance(node.get("$id"), str):
+        if isinstance(node.get("$id"), str) and not entered:
             resolver = resolver.in_subresource(Resource.from_contents(node, default_specification=DRAFT202012))
         ref = node.get("$ref")
         if isinstance(ref, str):
@@ -339,12 +341,15 @@ def _check_refs(schema: Any, base: str, path: Path, key: str) -> dict[str, Resou
                     Draft202012Validator.check_schema(got.contents)
                 except jsonschema.SchemaError as exc:
                     raise ContractError(f"{path}: {key}: $ref {ref!r} points at an invalid schema: {exc.message}") from None
-                visit(got.contents, got.resolver)
+                visit(got.contents, got.resolver, entered=True)
         for k, v in node.items():
-            if k not in NOT_SCHEMA:
+            if k in SCHEMA_MAPS and isinstance(v, dict):
+                for sub in v.values():  # names are data; every value is a schema
+                    visit(sub, resolver)
+            elif k not in NOT_SCHEMA:
                 visit(v, resolver)
 
-    visit(schema, registry.resolver(base_uri=base))
+    visit(schema, registry.resolver(base_uri=base), entered=True)
     return resources
 
 

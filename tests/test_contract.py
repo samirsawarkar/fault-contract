@@ -173,6 +173,24 @@ def test_a_ref_inside_an_embedded_resource_resolves_against_that_resource(tmp_pa
         load_dir(folder(tmp_path))
 
 
+def test_a_ref_target_with_its_own_id_and_inner_refs(tmp_path):
+    # the target's $id is applied once: its #/$defs/n is its own
+    s = {"type": "object", "properties": {"thing": {"$ref": "nested/thing.json"}},
+         "$defs": {"t": {"$id": "nested/thing.json", "$defs": {"n": {"type": "number"}}, "$ref": "#/$defs/n"}}}
+    write_contract(folder(tmp_path), "t", request=schema(s))
+    side = load_dir(folder(tmp_path)).get("t").request
+    assert validate_side(side, '{"thing": 5}', "t", 1) == []
+    [v] = validate_side(side, '{"thing": "x"}', "t", 1)
+    assert (v.path, v.keyword) == ("$.thing", "type")
+
+
+@pytest.mark.parametrize("name", ["enum", "const", "default", "examples"])
+def test_properties_named_like_data_keywords_are_still_checked(tmp_path, name):
+    write_contract(folder(tmp_path), "t", request=schema({"type": "object", "properties": {name: {"$ref": "#/missing"}}}))
+    with pytest.raises(ContractError, match="points at nothing"):
+        load_dir(folder(tmp_path))
+
+
 def test_a_referenced_file_must_be_a_valid_schema(tmp_path):
     (tmp_path / "bad.json").write_text(json.dumps({"type": "bogus"}), encoding="utf-8")
     write_contract(folder(tmp_path), "t", request=schema({"$ref": "../bad.json"}))
