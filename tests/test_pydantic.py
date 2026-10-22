@@ -85,6 +85,29 @@ def test_coerced_ignore_reports_without_firing(tmp_path):
     assert not counted(v, Settings(coerced="ignore")) and counted(v, Settings())
 
 
+def test_a_model_with_strict_config_still_tells_coerced_from_rejected(tmp_path):
+    [v] = check(tmp_path, "StrictCount", {"n": "1"})
+    assert v.kind == "coerced"
+    assert not counted(v, Settings(coerced="ignore"))
+
+
+def test_a_custom_validator_message_never_reaches_the_output(tmp_path):
+    secret = "tok_" + "z" * 90
+    [v] = check(tmp_path, "Token", {"token": secret})
+    assert secret not in json.dumps(v.__dict__) and "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz" not in v.message
+    assert v.message == "breaks the model rule value_error" and len(v.preview) <= 40
+
+
+@pytest.mark.parametrize("model, value, message", [
+    ("Count", {"n": "abc"}, "expected integer, got string"),
+    ("Refund", {"order_id": 1, "amount": 1.0, "customer_id": "c"}, "expected string, got integer"),
+    ("Shipping", {"when": "2026-10-22", "mode": "sea"}, "value is not one of: 'air' or 'ground'"),
+])
+def test_pydantic_messages_are_built_from_the_error_type(tmp_path, model, value, message):
+    [v] = check(tmp_path, model, value)
+    assert v.message == message
+
+
 def test_json_schema_of_a_pydantic_side(tmp_path):
     s = side(tmp_path, "Refund").json_schema()
     assert s["required"] == ["order_id", "amount", "customer_id"] and s["properties"]["amount"]["type"] == "number"

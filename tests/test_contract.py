@@ -80,7 +80,7 @@ def test_pydantic_source_loads_and_defaults_to_strict(tmp_path):
     ({"contract": 1, "tool": "t", "request": {"schema": {"$ref": "https://example.com/s.json"}}}, "remote $ref is refused"),
     ({"contract": 1, "tool": "t", "request": {"schema_file": "http://example.com/s.json"}}, "is remote"),
     ({"contract": 1, "tool": "t", "request": {"schema": {"$ref": "#/$defs/nope"}}}, "points at nothing"),
-    ({"contract": 1, "tool": "t", "request": {"schema": {"$ref": "missing.json"}}}, "missing.json not found"),
+    ({"contract": 1, "tool": "t", "request": {"schema": {"$ref": "missing.json"}}}, "missing.json: file not found"),
     ({"contract": 1, "tool": "t", "request": {"schema_file": "nope.json"}}, "'nope.json' not found"),
     ({"contract": 1, "tool": "t", "request": {"pydantic": "no_such_module_xyz:M"}},
      "cannot import no_such_module_xyz (ModuleNotFoundError); install the package in this environment, or snapshot it: "
@@ -151,6 +151,33 @@ def test_validators_are_compiled_once(tmp_path):
     v1 = side.validator
     validate_side(side, "{}", "t", 1)
     assert side.validator is v1
+
+
+def test_embedded_id_scopes_are_honoured(tmp_path):
+    # a $ref to an embedded resource by its $id resolves; it is not a missing file
+    s = {"type": "object", "properties": {"thing": {"$ref": "nested/thing.json"}},
+         "$defs": {"t": {"$id": "nested/thing.json", "type": "string"}}}
+    write_contract(folder(tmp_path), "t", request=schema(s))
+    side = load_dir(folder(tmp_path)).get("t").request
+    [v] = validate_side(side, '{"thing": 5}', "t", 1)
+    assert (v.path, v.keyword) == ("$.thing", "type")
+
+
+def test_a_ref_inside_an_embedded_resource_resolves_against_that_resource(tmp_path):
+    # #/$defs/N exists in the outer document but not in the embedded resource: a load error
+    s = {"$defs": {"N": {"type": "number"},
+                   "inner": {"$id": "inner.json", "type": "object", "properties": {"n": {"$ref": "#/$defs/N"}}}},
+         "$ref": "inner.json"}
+    write_contract(folder(tmp_path), "t", request=schema(s))
+    with pytest.raises(ContractError, match=r"\$ref '#/\$defs/N' points at nothing"):
+        load_dir(folder(tmp_path))
+
+
+def test_a_referenced_file_must_be_a_valid_schema(tmp_path):
+    (tmp_path / "bad.json").write_text(json.dumps({"type": "bogus"}), encoding="utf-8")
+    write_contract(folder(tmp_path), "t", request=schema({"$ref": "../bad.json"}))
+    with pytest.raises(ContractError, match="points at an invalid schema"):
+        load_dir(folder(tmp_path))
 
 
 def test_load_file_directly(tmp_path):

@@ -229,11 +229,10 @@ def _schema_side(path: Path, name: str, schema: dict[str, Any] | bool, source: s
         at = "#/" + "/".join(str(p) for p in exc.path) if exc.path else "#"
         raise ContractError(f"{path}: {key}: invalid schema at {at}: {exc.message}") from None
     base = path.resolve().as_uri()
-    resources: dict[str, Resource] = {}
-    _check_refs(schema, base, path, key, resources, {})
-    registry = Registry().with_resources(resources.items())
     if isinstance(schema, dict) and "$id" not in schema:
         schema = {"$id": base, **schema}
+    resources = _check_refs(schema, base, path, key)
+    registry = Registry().with_resources(resources.items())
     validator = Draft202012Validator(schema, registry=registry, format_checker=FORMAT_CHECKER)
     used = set(_formats(target)) | {f for r in resources.values() for f in _formats(r.contents)}
     unchecked = tuple(sorted(f for f in used if f not in FORMAT_CHECKER.checkers))
@@ -287,40 +286,66 @@ def _formats(schema: Any) -> Iterator[str]:
             yield n["format"]
 
 
-def _check_refs(schema: Any, base: str, path: Path, key: str, resources: dict[str, Resource],
-                seen: dict[str, bool]) -> None:
-    """Resolve every ``$ref`` now, so a bad one is a load error and not a failure mid-run. Local files
-    that are referenced are read once and kept in the registry."""
-    for n in walk(schema):
-        ref = n.get("$ref")
-        if not isinstance(ref, str):
-            continue
-        if _remote(ref):
-            raise ContractError(f"{path}: {key}: $ref {ref!r} is remote; remote $ref is refused (there is no network)")
-        full = urljoin(base, ref)
-        doc_uri, fragment = urldefrag(full)
-        if doc_uri == base.split("#")[0] and doc_uri not in resources:
-            doc = schema
-        else:
-            if urlparse(doc_uri).scheme != "file":
-                raise ContractError(f"{path}: {key}: $ref {ref!r} is not a local file")
-            if doc_uri not in resources:
-                target = Path(_file_path(doc_uri))
-                if not target.is_file():
-                    raise ContractError(f"{path}: {key}: $ref {ref!r}: {target.name} not found")
-                _, contents = _read_json(target, path, key)
-                resources[doc_uri] = Resource.from_contents(contents, default_specification=DRAFT202012)
-                if doc_uri not in seen:
-                    seen[doc_uri] = True
-                    _check_refs(contents, doc_uri, path, key, resources, seen)
-            doc = resources[doc_uri].contents
-        if fragment.startswith("/") or fragment == "":
+NOT_SCHEMA = ("enum", "const", "examples", "default")  # keywords whose values are data, not subschemas
+
+
+def _check_refs(schema: Any, base: str, path: Path, key: str) -> dict[str, Resource]:
+    """Resolve every ``$ref`` now, with referencing's own resolver (so ``$id`` scopes count exactly as
+    they do when validating), so a bad one is a load error and not a failure mid-run. Every schema a
+    ``$ref`` reaches is checked against the metaschema. Returns the local files read, for the registry."""
+    resources: dict[str, Resource] = {}
+
+    def retrieve(uri: str) -> Resource:
+        if _remote(uri):
+            raise ContractError(f"{path}: {key}: $ref to {uri!r} is remote; remote $ref is refused (there is no network)")
+        if urlparse(uri).scheme != "file":
+            raise ContractError(f"{path}: {key}: $ref to {uri!r} is not a local file")
+        target = Path(_file_path(uri))
+        if not target.is_file():
+            raise ContractError(f"{path}: {key}: $ref to {target.name}: file not found")
+        _, contents = _read_json(target, path, key)
+        resources[uri] = Resource.from_contents(contents, default_specification=DRAFT202012)
+        return resources[uri]
+
+    root = Resource.from_contents(schema, default_specification=DRAFT202012)
+    registry = Registry(retrieve=retrieve).with_resource(base, root)
+    seen = {id(schema)}
+
+    def visit(node: Any, resolver: Any) -> None:
+        if isinstance(node, list):
+            for x in node:
+                visit(x, resolver)
+            return
+        if not isinstance(node, dict):
+            return
+        if isinstance(node.get("$id"), str):
+            resolver = resolver.in_subresource(Resource.from_contents(node, default_specification=DRAFT202012))
+        ref = node.get("$ref")
+        if isinstance(ref, str):
+            if _remote(ref):
+                raise ContractError(f"{path}: {key}: $ref {ref!r} is remote; remote $ref is refused (there is no network)")
             try:
-                _pointer(doc, fragment)
-            except (LookupError, ValueError):
+                got = resolver.lookup(ref)
+            except Exception as exc:  # referencing wraps a failed retrieve; ours carries the message
+                cause: BaseException | None = exc
+                while cause is not None and not isinstance(cause, ContractError):
+                    cause = cause.__cause__ or cause.__context__
+                if cause is not None:
+                    raise cause from None
                 raise ContractError(f"{path}: {key}: $ref {ref!r} points at nothing") from None
-        elif not any(isinstance(x.get("$anchor"), str) and x["$anchor"] == fragment for x in walk(doc)):
-            raise ContractError(f"{path}: {key}: $ref {ref!r}: anchor {fragment!r} not found")
+            if id(got.contents) not in seen:
+                seen.add(id(got.contents))
+                try:
+                    Draft202012Validator.check_schema(got.contents)
+                except jsonschema.SchemaError as exc:
+                    raise ContractError(f"{path}: {key}: $ref {ref!r} points at an invalid schema: {exc.message}") from None
+                visit(got.contents, got.resolver)
+        for k, v in node.items():
+            if k not in NOT_SCHEMA:
+                visit(v, resolver)
+
+    visit(schema, registry.resolver(base_uri=base))
+    return resources
 
 
 def _file_path(uri: str) -> str:

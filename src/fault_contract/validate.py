@@ -206,6 +206,46 @@ def _pydantic_keyword(t: str) -> str:
     return t
 
 
+_PYDANTIC_TYPES = {"int": "integer", "float": "number", "decimal": "number", "string": "string", "str": "string",
+                   "bool": "boolean", "list": "array", "tuple": "array", "set": "array", "frozen_set": "array",
+                   "dict": "object", "model": "object", "model_attributes": "object", "dataclass": "object",
+                   "none": "null", "bytes": "string"}
+
+
+def _pydantic_message(t: str, ctx: dict[str, Any], value: Any) -> str:
+    """Plain words from the error type and the model's own limits (``ctx``). Pydantic's ``msg`` is never
+    used: a custom validator can put the rejected value in it."""
+    if t in ("literal_error", "enum"):
+        return f"value is not one of: {ctx.get('expected', '?')}"
+    if t == "greater_than":
+        return f"value must be above {ctx.get('gt')}"
+    if t == "greater_than_equal":
+        return f"value is below the minimum {ctx.get('ge')}"
+    if t == "less_than":
+        return f"value must be below {ctx.get('lt')}"
+    if t == "less_than_equal":
+        return f"value is above the maximum {ctx.get('le')}"
+    if t == "multiple_of":
+        return f"value is not a multiple of {ctx.get('multiple_of')}"
+    if t == "string_too_short":
+        return f"text is shorter than {ctx.get('min_length')} characters"
+    if t == "string_too_long":
+        return f"text is longer than {ctx.get('max_length')} characters"
+    if t == "string_pattern_mismatch":
+        return f"text does not match the pattern {ctx.get('pattern')}"
+    if t == "too_short":
+        return f"list has {len(value) if isinstance(value, (list, dict)) else 0} items, needs at least {ctx.get('min_length')}"
+    if t == "too_long":
+        return f"list has {len(value) if isinstance(value, (list, dict)) else 0} items, allows at most {ctx.get('max_length')}"
+    if t == "none_required":
+        return f"expected null, got {json_type(value)}"
+    m = re.match(r"^(.*?)_(?:type|parsing)$", t)
+    if m:
+        name = m.group(1)
+        return f"expected {_PYDANTIC_TYPES.get(name, name.replace('_', ' '))}, got {json_type(value)}"
+    return f"breaks the model rule {t}"
+
+
 def _loc_parts(loc: tuple[Any, ...], instance: Any) -> tuple[list[Any], Any, bool]:
     """Payload path parts from a Pydantic ``loc``, dropping union and validator tags that are not keys.
     Returns (parts, value at the path, found)."""
@@ -235,7 +275,7 @@ def _pydantic_violations(side: Side, raw: str, instance: Any, tool: str, step: i
         strict_err = err
     if side.strict:
         try:
-            ta.validate_json(raw)
+            ta.validate_json(raw, strict=False)  # explicit: a model may set strict=True in its own config
             kind = "coerced"        # accepted only by converting values
         except ValidationError:
             kind = "rejected"       # a backend with this model would refuse the call
@@ -250,7 +290,7 @@ def _pydantic_violations(side: Side, raw: str, instance: Any, tool: str, step: i
         elif kw == "additionalProperties":
             msg = f"field {redact(str(parts[-1])) if parts else '?'} is not in the contract"
         else:
-            msg = redact(str(d.get("msg", "")))
+            msg = _pydantic_message(str(d.get("type", "")), d.get("ctx") or {}, value)
         pv = "" if kw == "required" or not found else preview(value)
         out.append(Violation(tool, side.name, step, fmt_path(parts), kw, kind, msg, pv))
     return out

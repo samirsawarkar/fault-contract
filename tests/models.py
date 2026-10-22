@@ -3,7 +3,7 @@ from datetime import date
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class Refund(BaseModel):
@@ -31,6 +31,20 @@ class Color(str, Enum):
 class Item(BaseModel):
     sku: str
     qty: int
+
+
+class StrictCount(BaseModel):
+    model_config = ConfigDict(strict=True)
+    n: int
+
+
+class Token(BaseModel):
+    token: str
+
+    @field_validator("token")
+    @classmethod
+    def no_tokens(cls, v: str) -> str:
+        raise ValueError("invalid token " + v)
 
 
 class Order(BaseModel):
