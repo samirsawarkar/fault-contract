@@ -398,6 +398,25 @@ def _resolve_with(node: Any, resolver: Any, depth: int, entered: bool = False) -
     return {k: _resolve_with(v, resolver, depth) for k, v in node.items()}
 
 
+def json_key(v: Any) -> Any:
+    """A value as JSON Schema compares it: a boolean is never a number, and 1 equals 1.0."""
+    if isinstance(v, bool) or v is None:
+        return ("const", v)
+    if isinstance(v, (int, float)):
+        return ("number", float(v))
+    if isinstance(v, str):
+        return ("string", v)
+    if isinstance(v, list):
+        return ("array", tuple(json_key(x) for x in v))
+    if isinstance(v, dict):
+        return ("object", tuple(sorted((str(k), json_key(x)) for k, x in v.items())))
+    return ("other", repr(v))
+
+
+def json_equal(a: Any, b: Any) -> bool:
+    return json_key(a) == json_key(b)
+
+
 EXTRA_KEYWORDS = ("additionalProperties", "unevaluatedProperties", "propertyNames", "minProperties", "maxProperties")
 
 
@@ -421,12 +440,13 @@ def merge_ref(target: Any, rest: dict[str, Any]) -> Any:
         return {"allOf": [target, rest]}
     out = dict(target)
     for k, v in rest.items():
-        if k not in out or out[k] == v:
+        if k not in out or json_equal(out[k], v):
             out[k] = v
         elif k in ("properties", "patternProperties", "$defs") and isinstance(v, dict) and isinstance(out[k], dict):
             joined = dict(out[k])
             for name, sub in v.items():
-                joined[name] = sub if name not in joined or joined[name] == sub else {"allOf": [joined[name], sub]}
+                same = name not in joined or json_equal(joined[name], sub)
+                joined[name] = sub if same else {"allOf": [joined[name], sub]}
             out[k] = joined
         elif k == "required" and isinstance(v, list) and isinstance(out[k], list):
             out[k] = list(dict.fromkeys([*out[k], *v]))

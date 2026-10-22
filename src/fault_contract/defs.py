@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import Settings
-from .contract import ContractError, Contracts, import_object, resolve_refs
+from .contract import ContractError, Contracts, import_object, json_key, resolve_refs
 
 NOT_COMPARED = ("pattern", "format", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
                 "minLength", "maxLength", "minItems", "maxItems", "oneOf", "anyOf", "allOf")
@@ -130,7 +130,8 @@ def compare(d: Any, c: Any, path: str = "$") -> tuple[list[tuple[str, str, str]]
         return found, skipped
     de, ce = _enum(d), _enum(c)
     if de is not None and ce is not None:
-        extra = [v for v in de if v not in ce]
+        allowed = {json_key(v) for v in ce}
+        extra = [v for v in de if json_key(v) not in allowed]
         if extra:
             found.append(("D6", "error", f"{path} lists values the contract does not allow: "
                                          + ", ".join(json.dumps(v, ensure_ascii=False) for v in extra)))

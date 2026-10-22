@@ -60,6 +60,26 @@ def test_each_rule_fires_on_its_pair_and_is_quiet_when_fixed(tmp_path, rule):
     assert rules(run(tmp_path / "fixed", fixed, schema(c))) == []
 
 
+@pytest.mark.parametrize("d_enum, c_enum, fires", [
+    ([1], [True], True), ([0], [False], True), ([True], [1], True), ([1.0], [1], False),
+    ([{"a": 1}], [{"a": True}], True), ([[1, 2]], [[1, 2]], False), (["x", None], ["x"], True),
+])
+def test_d6_compares_values_as_json_schema_does(tmp_path, d_enum, c_enum, fires):
+    found = run(tmp_path, obj({"v": {"enum": d_enum}}), schema(obj({"v": {"enum": c_enum}})))
+    assert ("D6" in rules(found)) is fires
+
+
+def test_nested_enums_compare_as_json_too(tmp_path):
+    d = obj({"m": obj({"flag": {"enum": [1]}})})
+    c = obj({"m": obj({"flag": {"enum": [True]}})})
+    assert rules(run(tmp_path, d, schema(c))) == ["D6"]
+
+
+def test_a_ref_sibling_const_true_does_not_merge_with_const_1(tmp_path):
+    from fault_contract.contract import merge_ref
+    assert merge_ref({"const": 1}, {"const": True}) == {"allOf": [{"const": 1}, {"const": True}]}
+
+
 def test_d1_and_d2(tmp_path):
     cs, st = contracts_with(tmp_path, stale={"request": schema({})})
     found = defs.run({"new_tool": {}}, cs, st)
