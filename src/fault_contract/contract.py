@@ -398,6 +398,9 @@ def _resolve_with(node: Any, resolver: Any, depth: int, entered: bool = False) -
     return {k: _resolve_with(v, resolver, depth) for k, v in node.items()}
 
 
+EXTRA_KEYWORDS = ("additionalProperties", "unevaluatedProperties", "propertyNames", "minProperties", "maxProperties")
+
+
 def merge_ref(target: Any, rest: dict[str, Any]) -> Any:
     """A ``$ref`` target and its sibling keywords as one schema. Both apply, so nothing is dropped:
     property maps are joined, ``required`` lists united, and anything that truly conflicts is kept
@@ -405,6 +408,16 @@ def merge_ref(target: Any, rest: dict[str, Any]) -> Any:
     if not rest:
         return target
     if not isinstance(target, dict):
+        return {"allOf": [target, rest]}
+    # additionalProperties and its kin are judged against each schema's own properties: joining the
+    # maps would change what they allow, so such a pair stays a conjunction
+    def extra(s: dict[str, Any]) -> bool:
+        return any(k in s for k in EXTRA_KEYWORDS)
+
+    def props(s: dict[str, Any]) -> bool:
+        return "properties" in s or "patternProperties" in s
+
+    if (extra(target) and props(rest)) or (extra(rest) and props(target)):
         return {"allOf": [target, rest]}
     out = dict(target)
     for k, v in rest.items():

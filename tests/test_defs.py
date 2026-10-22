@@ -105,6 +105,20 @@ def test_a_ref_with_sibling_properties_keeps_both(tmp_path):
     assert ("D7", "$.amount") in {(f.rule, f.message.split(" ")[0]) for f in found}
 
 
+@pytest.mark.parametrize("closed_side", ["target", "sibling"])
+def test_a_closed_object_behind_a_ref_is_not_reopened_by_sibling_properties(tmp_path, closed_side):
+    money = {"type": "object", "properties": {"amount": {"type": "number"}}}
+    sib = {"properties": {"note": {"type": "string"}}}
+    (money if closed_side == "target" else sib)["additionalProperties"] = False
+    c = {"$defs": {"money": money}, "$ref": "#/$defs/money", **sib}
+    found = run(tmp_path, obj({"amount": {"type": "number"}, "note": {"type": "string"}}), schema(c))
+    # the contract rejects {"amount": 1, "note": "x"}; defs must not call the pair OK silently
+    assert any(f.level == "info" and "allOf" in f.message for f in found)
+    cs, _ = contracts_with(tmp_path / "v", t={"request": schema(c)})
+    from fault_contract.validate import validate_side
+    assert validate_side(cs.get("t").request, '{"amount": 1, "note": "x"}', "t", 1)
+
+
 def test_a_ref_whose_siblings_conflict_is_listed_as_not_compared(tmp_path):
     c = {"$defs": {"s": {"type": "string"}}, "type": "object", "properties": {"a": {"$ref": "#/$defs/s", "type": "integer"}}}
     found = run(tmp_path, obj({"a": {"type": "boolean"}}), schema(c))
