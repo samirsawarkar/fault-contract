@@ -1,0 +1,24 @@
+{
+  "contract": 1,
+  "tool": "lookup_order",
+  "owner": "orders",
+  "request": {
+    "schema": {
+      "type": "object",
+      "properties": {"order_id": {"type": "string"}},
+      "additionalProperties": false
+    }
+  },
+  "response": {
+    "schema": {
+      "type": "object",
+      "properties": {
+        "order_id": {"type": "string"},
+        "customer_id": {"type": "string"},
+        "charges": {"type": "array", "items": {"type": "number"}},
+        "status": {"enum": ["pending", "shipped", "delivered"]}
+      },
+      "required": ["order_id", "charges", "status"]
+    }
+  }
+}
