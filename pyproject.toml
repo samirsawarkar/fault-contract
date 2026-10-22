@@ -30,7 +30,7 @@ contract = "fault_contract.zero_check:CHECK"
 fault_contract = "fault_contract.pytest_plugin"
 
 [project.urls]
-Homepage = "https://github.com/Faultline-lab/fault-contract"
+Homepage = "https://github.com/samirsawarkar/fault-contract"
 
 [tool.setuptools.packages.find]
 where = ["src"]

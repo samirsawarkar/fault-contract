@@ -15,7 +15,7 @@ Checks read data that was already sent and received: nothing calls a tool, a bac
 The repo includes faultgate-zero's refund agent with contracts for its four tools.
 
 ```bash
-git clone https://github.com/Faultline-lab/fault-contract && cd fault-contract
+git clone https://github.com/samirsawarkar/fault-contract && cd fault-contract
 python -m venv .venv
 .venv/bin/pip install -e ".[dev]"     # Windows: .venv\Scripts\pip install -e ".[dev]"
 cd examples/refund_agent
