@@ -36,7 +36,8 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["slow: performance tests, run nightly"]
+markers = ["slow: performance tests, run nightly (pytest -m slow)"]
+addopts = "-m \"not slow\""
 
 # Our own suite drives runs that break contracts on purpose; the check's behaviour is tested with pytester.
 [tool.faultgate_zero]

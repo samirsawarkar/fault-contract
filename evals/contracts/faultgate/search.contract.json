@@ -1,0 +1,52 @@
+{
+  "contract": 1,
+  "tool": "search",
+  "description": "faultgate example retrieval agent (evals)",
+  "request": {
+    "schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "response": {
+    "schema": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "n_candidates": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "ok",
+        "error",
+        "n_candidates",
+        "candidates"
+      ]
+    }
+  }
+}

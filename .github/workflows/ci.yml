@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      # faultgate-zero 0.2 (check plugins, formats.load) until it is on PyPI
+      - name: Checkout faultgate-zero
+        uses: actions/checkout@v4
+        with:
+          repository: Faultline-lab/faultgate-zero
+          ref: feat/check-plugins-formats
+          path: _deps/faultgate-zero
+      - run: python -m pip install -e "_deps/faultgate-zero[formats]" -e ".[dev]"
+      - run: python -m pytest -q
+      - run: python evals/run.py --faultgate-zero _deps/faultgate-zero
+      - run: python -m pip install build twine && python -m build && python -m twine check --strict dist/*

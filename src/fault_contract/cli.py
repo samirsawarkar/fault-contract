@@ -232,6 +232,11 @@ COMMANDS = {"init": cmd_init, "check": cmd_check, "defs": cmd_defs, "explain": c
 
 
 def main(argv: list[str] | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):  # a console that cannot encode a character must not crash us
+        try:
+            stream.reconfigure(errors="backslashreplace")
+        except (AttributeError, ValueError):
+            pass
     ap = build_parser()
     a = ap.parse_args(argv)
     try:

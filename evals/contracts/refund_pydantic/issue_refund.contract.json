@@ -1,0 +1,11 @@
+{
+  "contract": 1,
+  "tool": "issue_refund",
+  "description": "Pydantic copy of the refund agent contract (evals)",
+  "request": {
+    "pydantic": "refund_models:IssueRefund"
+  },
+  "response": {
+    "pydantic": "refund_models:Refunded"
+  }
+}
