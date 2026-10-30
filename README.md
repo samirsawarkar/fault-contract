@@ -10,6 +10,16 @@ Checks read data that was already sent and received: nothing calls a tool, a bac
 
 > **Status:** 0.1.0 alpha. MIT, free. Needs faultgate-zero 0.2 (check plugins, `formats.load`).
 
+## Install
+
+```bash
+pip install fault-contract        # also installs faultgate-zero 0.2.x, jsonschema and referencing
+pip install pydantic              # only if a contract points at a Pydantic model
+```
+
+Python 3.11 or newer. With it installed, `pytest` runs the `contract` check in every faultgate-zero run
+and the `fault-contract` command is on your path.
+
 ## 5-minute quickstart
 
 The repo includes faultgate-zero's refund agent with contracts for its four tools.
@@ -21,8 +31,6 @@ python -m venv .venv
 cd examples/refund_agent
 ```
 
-Until faultgate-zero 0.2.0 is on PyPI, install it from source first:
-`.venv/bin/pip install "faultgate-zero[formats] @ git+https://github.com/Faultline-lab/faultgate-zero@feat/check-plugins-formats"`.
 Commands below assume the venv is active (`source .venv/bin/activate`, Windows `.venv\Scripts\activate`).
 
 **1. Draft contracts from what already exists.** (The example already has them; this shows how they
@@ -270,7 +278,7 @@ blocked, and 25,000 tool calls timed. `python evals/build_corpus.py` regenerates
 ## Development
 
 ```bash
-pip install -e "path/to/faultgate-zero[formats]" -e ".[dev]"
+pip install -e ".[dev]"
 pytest                    # the unit suite; pytest -m slow runs the performance test
 python evals/run.py       # the acceptance table
 ```
