@@ -1,0 +1,93 @@
+name: publish
+
+# Release: push a tag vX.Y.Z that matches pyproject.toml and fault_contract.__version__.
+# Publishes to PyPI with trusted publishing (OIDC): no stored token. One-time setup on PyPI
+# (Account > Publishing > add a pending publisher): project fault-contract, owner samirsawarkar,
+# repository fault-contract, workflow publish.yml, environment pypi.
+# Needs faultgate-zero 0.2.x on PyPI (the tests install it from there).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to publish
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install -e ".[dev]"
+      - run: python -m pytest -q
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check release version
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          python - <<'PY'
+          import ast
+          import os
+          import tomllib
+          from pathlib import Path
+          version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
+          assert os.environ["RELEASE_TAG"] == f"v{version}", "Tag must match package version"
+          module = ast.parse(Path("src/fault_contract/__init__.py").read_text())
+          package_version = next(ast.literal_eval(node.value) for node in module.body
+                                 if isinstance(node, ast.Assign)
+                                 and any(isinstance(t, ast.Name) and t.id == "__version__" for t in node.targets))
+          assert package_version == version, "Package and project versions must match"
+          PY
+      - run: python -m pip install build twine
+      - run: python -m build
+      - run: python -m twine check --strict dist/*
+      - name: Test installed wheel
+        run: |
+          python -m pip install dist/*.whl
+          fault-contract --version
+          python -m pip check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/fault-contract/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
