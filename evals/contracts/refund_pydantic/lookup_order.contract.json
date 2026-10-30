@@ -1,0 +1,11 @@
+{
+  "contract": 1,
+  "tool": "lookup_order",
+  "description": "Pydantic copy of the refund agent contract (evals)",
+  "request": {
+    "pydantic": "refund_models:LookupOrder"
+  },
+  "response": {
+    "pydantic": "refund_models:Order"
+  }
+}

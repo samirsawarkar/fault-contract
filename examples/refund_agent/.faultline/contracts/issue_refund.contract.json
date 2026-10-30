@@ -1,0 +1,25 @@
+{
+  "contract": 1,
+  "tool": "issue_refund",
+  "owner": "billing",
+  "description": "What the refund agent sends to billing, and what it reads back.",
+  "request": {
+    "schema": {
+      "type": "object",
+      "properties": {
+        "order_id":    {"type": "string", "pattern": "^[0-9]{4,}$"},
+        "amount":      {"type": "number", "exclusiveMinimum": 0},
+        "customer_id": {"type": "string"}
+      },
+      "required": ["order_id", "amount", "customer_id"],
+      "additionalProperties": false
+    }
+  },
+  "response": {
+    "schema": {
+      "type": "object",
+      "properties": {"refunded": {"type": "number"}, "order_id": {"type": "string"}},
+      "required": ["refunded", "order_id"]
+    }
+  }
+}

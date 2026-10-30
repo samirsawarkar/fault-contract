@@ -1,0 +1,35 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      # faultgate-zero comes from PyPI (0.2.x: check plugins, formats.load). Its source is checked out at
+      # the release tag only for its test suite, which evals/run.py runs with fault-contract installed.
+      - name: Checkout faultgate-zero (its tests)
+        uses: actions/checkout@v4
+        with:
+          repository: Faultline-lab/faultgate-zero
+          ref: v0.2.0
+          path: _deps/faultgate-zero
+      # faultgate-zero's dev extra too, for that suite
+      - run: python -m pip install "faultgate-zero[formats,dev]>=0.2,<0.3" -e ".[dev]"
+      - run: python -m pytest -q
+      - run: python evals/run.py --faultgate-zero _deps/faultgate-zero
+      # build, twine and the actions above: OK in scout-a8ccd56b.md (copied from faultgate-zero)
+      - run: python -m pip install build twine && python -m build && python -m twine check --strict dist/*

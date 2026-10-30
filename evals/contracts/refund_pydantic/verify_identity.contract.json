@@ -1,0 +1,11 @@
+{
+  "contract": 1,
+  "tool": "verify_identity",
+  "description": "Pydantic copy of the refund agent contract (evals)",
+  "request": {
+    "pydantic": "refund_models:VerifyIdentity"
+  },
+  "response": {
+    "pydantic": "refund_models:Verified"
+  }
+}

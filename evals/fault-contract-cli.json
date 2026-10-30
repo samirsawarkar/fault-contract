@@ -1,0 +1,21 @@
+{
+  "command": [".venv\\Scripts\\python.exe", "-m", "fault_contract.cli"],
+  "cases": [
+    {"name": "help lists the five commands", "args": ["--help"],
+     "expect": {"exit_code": 0, "contains": ["init", "check", "defs", "explain", "contracts"]}},
+    {"name": "contracts: the refund example's four contracts load", "args": ["contracts", "--contracts", "examples/refund_agent/.faultline/contracts"],
+     "expect": {"exit_code": 0, "contains": ["issue_refund", "lookup_order", "search_orders", "verify_identity", "OK  4 contracts loaded"]}},
+    {"name": "check: the clean refund corpus has no violations", "args": ["check", "evals/corpus/refund.otlp.json", "--contracts", "examples/refund_agent/.faultline/contracts"],
+     "expect": {"exit_code": 0, "contains": ["format     otlp (detected)", "OK  0 violations"]}},
+    {"name": "check: the clean faultgate corpus has no violations", "args": ["check", "evals/corpus/faultgate", "--contracts", "evals/contracts/faultgate"],
+     "expect": {"exit_code": 0, "contains": ["tool calls 2,040", "OK  0 violations"]}},
+    {"name": "check: unknown tools fail when asked", "args": ["check", "evals/corpus/faultgate", "--contracts", "examples/refund_agent/.faultline/contracts", "--unknown-tools", "fail"],
+     "expect": {"exit_code": 1, "contains": ["no contract: search", "FAIL"]}},
+    {"name": "check: a missing export is a usage error", "args": ["check", "no-such-export.json", "--contracts", "examples/refund_agent/.faultline/contracts"],
+     "expect": {"exit_code": 2, "not_contains": ["Traceback"]}},
+    {"name": "check: no contracts folder is a usage error", "args": ["check", "evals/corpus/refund.otlp.json", "--contracts", "no-such-folder"],
+     "expect": {"exit_code": 2, "not_contains": ["Traceback"]}},
+    {"name": "check: a bad format name is a usage error", "args": ["check", "evals/corpus/refund.otlp.json", "--format", "csv"],
+     "expect": {"exit_code": 2}}
+  ]
+}

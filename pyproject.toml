@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fault-contract"
+version = "0.1.0"
+description = "Write down the shape of data an agent sends to each tool and reads back, then check every real tool call against it: in pytest, in trace exports, and against the tool definitions the model is given."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Faultline-lab" }]
+keywords = ["ai", "agents", "tools", "json-schema", "pydantic", "contracts", "pytest"]
+classifiers = ["Development Status :: 3 - Alpha", "Framework :: Pytest", "Programming Language :: Python :: 3"]
+dependencies = ["faultgate-zero[formats]>=0.2,<0.3", "jsonschema>=4.18", "referencing>=0.28"]
+
+[project.optional-dependencies]
+# pydantic is imported only when a contract names a model; the tests need it, and openai for the example agent
+# (scout OK rows: pydantic, pytest-xdist in .aes/scout/scout-ce46b2db.md; openai/openai-python in scout-a7ad5ccb.md)
+dev = ["pydantic>=2", "pytest-xdist>=3", "openai>=2"]
+
+[project.scripts]
+fault-contract = "fault_contract.cli:main"
+
+[project.entry-points."faultgate_zero.checks"]
+contract = "fault_contract.zero_check:CHECK"
+
+[project.entry-points.pytest11]
+fault_contract = "fault_contract.pytest_plugin"
+
+[project.urls]
+Homepage = "https://github.com/samirsawarkar/fault-contract"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: performance tests, run nightly (pytest -m slow)"]
+addopts = "-m \"not slow\""
+
+# Our own suite drives runs that break contracts on purpose; the check's behaviour is tested with pytester.
+[tool.faultgate_zero]
+mode = "off"

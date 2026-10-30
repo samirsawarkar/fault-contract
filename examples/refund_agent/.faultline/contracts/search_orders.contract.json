@@ -1,0 +1,22 @@
+{
+  "contract": 1,
+  "tool": "search_orders",
+  "owner": "orders",
+  "request": {
+    "schema": {
+      "type": "object",
+      "properties": {"query": {"type": "string"}},
+      "additionalProperties": false
+    }
+  },
+  "response": {
+    "schema": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {"order_id": {"type": "string"}, "status": {"type": "string"}},
+        "required": ["order_id", "status"]
+      }
+    }
+  }
+}

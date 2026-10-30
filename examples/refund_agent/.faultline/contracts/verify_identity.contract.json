@@ -1,0 +1,19 @@
+{
+  "contract": 1,
+  "tool": "verify_identity",
+  "owner": "identity",
+  "request": {
+    "schema": {
+      "type": "object",
+      "properties": {"customer_id": {"type": "string"}},
+      "additionalProperties": false
+    }
+  },
+  "response": {
+    "schema": {
+      "type": "object",
+      "properties": {"verified": {"type": "boolean"}},
+      "required": ["verified"]
+    }
+  }
+}
